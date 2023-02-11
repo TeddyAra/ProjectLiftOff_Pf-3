@@ -10,16 +10,20 @@ public class MyGame : Game {
 	int roomSizeMin = 25;
 	int roomSizeMax = 100;
 	int roomAmount = 20;
+	int roomAttempt = 0;
 
 	Camera camera;
 	Random RNG = new Random();
 	List<Room> rooms = new List<Room>();
 
 	public MyGame() : base(800, 600, false) {
-        camera = new Camera(-400, -300, 800, 600);
+        camera = new Camera(0, 0, 800, 600);
         AddChild(camera);
 
 		RoomGenerator();
+		RouteGenerator();
+
+		targetFps = 60;
 	}
 
 	void Update() {
@@ -59,6 +63,7 @@ public class MyGame : Game {
         for (int i = 0; i < roomAmount; i++) {
             Console.WriteLine(i);
             roomSize = new Vector2(RNG.Next(roomSizeMin, roomSizeMax), RNG.Next(roomSizeMin, roomSizeMax));
+			if (i == roomAmount - 1) roomSize = new Vector2(roomSizeMax, roomSizeMax);
             facePicker = RNG.Next(1, 5);
 			roomPos = FaceCheck(roomSize, facePicker);
 
@@ -70,10 +75,34 @@ public class MyGame : Game {
 
                 AddChild(room);
 				rooms.Add(room);
-			} else {
+			// Prevents infinite loop
+			} else if (roomAttempt < 500) {
 				i--;
+				roomAttempt++;
 			}
 		}
+	}
+
+	void RouteGenerator() {
+		// Creates red line between rooms
+		for (int i = 0; i < rooms.Count - 1; i++) {
+            EasyDraw route = new EasyDraw(roomSizeMax * 2, roomSizeMax * 2);
+            route.Stroke(255, 0, 0);
+            route.StrokeWeight(5);
+			route.x = rooms[i].x + rooms[i].roomSize.x / 2 - roomSizeMax;
+			route.y = rooms[i].y + rooms[i].roomSize.y / 2 - roomSizeMax;
+
+			if (rooms[i].x + rooms[i].roomSize.x / 2 < rooms[i + 1].x + rooms[i + 1].roomSize.x / 2) {
+				route.Line(roomSizeMax, roomSizeMax, roomSizeMax + rooms[i].roomSize.x / 2 + rooms[i + 1].roomSize.x / 2, roomSizeMax);
+			} else if (rooms[i].x + rooms[i].roomSize.x / 2 > rooms[i + 1].x + rooms[i + 1].roomSize.x / 2) {
+                route.Line(roomSizeMax, roomSizeMax, roomSizeMax - rooms[i].roomSize.x / 2 - rooms[i + 1].roomSize.x / 2, roomSizeMax);
+            } else if (rooms[i].y + rooms[i].roomSize.y / 2 < rooms[i + 1].y + rooms[i + 1].roomSize.y / 2) {
+                route.Line(roomSizeMax, roomSizeMax, roomSizeMax, roomSizeMax + rooms[i].roomSize.y / 2 + rooms[i + 1].roomSize.y / 2);
+            } else {
+                route.Line(roomSizeMax, roomSizeMax, roomSizeMax, roomSizeMax - rooms[i].roomSize.y / 2 - rooms[i + 1].roomSize.y / 2);
+            }
+            AddChild(route);
+        }
 	}
 
 	Vector2 FaceCheck(Vector2 roomSize, int facePicker) { 
