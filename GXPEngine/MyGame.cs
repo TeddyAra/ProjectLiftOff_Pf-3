@@ -8,16 +8,17 @@ using System.Linq;
 
 public class MyGame : Game {
 	// Variables that you can change
-	int cameraSpeed = 3;
-	int roomSizeMin = 6;
-	int roomSizeMax = 12;
-	int hallwaySizeLongMin = 10;
-	int hallwaySizeLongMax = 20;
-	int hallwaySizeShortMin = 4;
-	int hallwaySizeShortMax = 6;
-	int roomAmount = 20;
-	int tileSize = 8;
+	int cameraSpeed = 5; // How fast the camera goes
+	int roomSizeMin = 6; // Min of rooms
+	int roomSizeMax = 12; // Max of rooms
+	int hallwaySizeLongMin = 10; // Min of the long side of hallways
+	int hallwaySizeLongMax = 20; // Max of the long side of hallways
+	int hallwaySizeShortMin = 4; // Min of the short side of hallways
+	int hallwaySizeShortMax = 6; // Max of the short side of hallways
+	int roomAmount = 20; // How many rooms you want
+	int tileSize = 8; // How many pixels the tiles are
 	int branchChance = 15; // Chance of creating a new branch (1 in x)
+	int hallwayChance = 3; // Chance of creating a hallway instead of a room (1 in x)
 	int[] branchPositions = { 6, 12 }; // Preset rooms to branch out of (To get rid of the chance of not getting any branches at all)
 
 	// Things that you can not change
@@ -37,9 +38,12 @@ public class MyGame : Game {
 
 	void Update() {
 		CameraMove();
-	}
 
-	static void Main() {
+        // To test generation bugs based on chance (Turn this on and turn CameraMove() off)
+        //GenerationTesting();
+    }
+
+    static void Main() {
 		new MyGame().Start();
 	}
 
@@ -74,12 +78,14 @@ public class MyGame : Game {
 		int roomNumber = 0;
 		int roomAttempt = 0;
 
-        for (int i = 0; i < roomAmount; i++) {
+		for (int i = 1; i < roomAmount + 1; i++) {
 			// Checks if last generation was a room (Makes sure two hallways can't generate next to each other), then randomly chooses between hallway and room
 			// Also makes sure hallways are straight between two rooms (Room can't generate on the side of a hallway)
-			if (rooms[roomNumber].type == "room") {
-                facePicker = RNG.Next(1, 5);
-                if (RNG.Next(1, 4) == 1) {
+			// Also makes sure rooms that are in the branchPositions list can't be hallways
+			if (roomNumber >= rooms.Count) roomNumber = rooms.Count - 1;
+            if (rooms[roomNumber].type == "room" && !branchPositions.Contains(i) && i != roomAmount - 1) {
+				facePicker = RNG.Next(1, 5);
+                if (RNG.Next(1, hallwayChance + 1) == 1) {
 					type = "hallway";
 					if (facePicker == 1 || facePicker == 3) {
 						roomSize = new Vector2(RNG.Next(hallwaySizeShortMin, hallwaySizeShortMax) * tileSize, RNG.Next(hallwaySizeLongMin, hallwaySizeLongMax) * tileSize);
@@ -87,48 +93,63 @@ public class MyGame : Game {
 						roomSize = new Vector2(RNG.Next(hallwaySizeLongMin, hallwaySizeLongMax) * tileSize, RNG.Next(hallwaySizeShortMin, hallwaySizeShortMax) * tileSize);
 					}
 				} else {
-                    type = "room";
-                    roomSize = new Vector2(RNG.Next(roomSizeMin, roomSizeMax) * tileSize, RNG.Next(roomSizeMin, roomSizeMax) * tileSize);
-                }
-            } else {	
+					type = "room";
+					roomSize = new Vector2(RNG.Next(roomSizeMin, roomSizeMax) * tileSize, RNG.Next(roomSizeMin, roomSizeMax) * tileSize);
+				}
+			} else {
 				type = "room";
 				roomSize = new Vector2(RNG.Next(roomSizeMin, roomSizeMax) * tileSize, RNG.Next(roomSizeMin, roomSizeMax) * tileSize);
 			}
 
-			// Generates last room (Overwrites prevvious code if this is the last room)
-			if (i == roomAmount - 1) {
+			// Overwrites previous code if this is the last room
+			if (i == roomAmount) {
 				roomSize = new Vector2(roomSizeMax * tileSize, roomSizeMax * tileSize);
 				type = "endRoom";
+
+				// Calculates furthest place from starting room
+				double distance;
+				double currentFurthestDistance = 0;
+
+				for (int j = 0; j < roomAmount - 1; j++) {
+					distance = Math.Sqrt(Math.Pow(rooms[0].x - rooms[j].x, 2)) + Math.Sqrt(Math.Pow(rooms[0].y - rooms[j].y, 2));
+					if (distance > currentFurthestDistance) {
+                        currentFurthestDistance = distance;
+						roomNumber = j;
+					}
+                }
 			}
 
-			// Chooses room position
+			// Calculates room position
 			roomPos = FaceCheck(roomSize, facePicker, roomNumber);
 
 			// Checks for overlap
 			if (!OverlapCheck(roomPos, roomSize)) {
-                Room room = new Room(roomSize, type, i + 1);
+                Room room = new Room(roomSize, type, i);
                 room.x = roomPos.x;
                 room.y = roomPos.y;
-				roomNumber = i + 1;
+				roomNumber = i;
 
                 AddChild(room);
 				rooms.Add(room);
 				roomAttempt = 0;
 
-			// Prevents infinite loop (Tries 500 times before creating new branch)
-			} else if (roomAttempt < 500) {
+			// Prevents infinite loop (Tries 100 times before creating new branch)
+			} else if (roomAttempt < 100) {
 				i--;
 				roomAttempt++;
+
+			// Gives up after 100 tries and instead branches out
 			} else {
+				i--;
                 do {
 					roomNumber = RNG.Next(0, i);
 				} while (rooms[roomNumber].type == "hallway");
             }
 
-			// Chooses when to create new branch
-			if (RNG.Next(1, branchChance + 1) == 1 || branchPositions.Contains(i + 1)) {
+			// Chooses when to create new branch (Based on chance, predetermined branch rooms, and the previously generated room)
+			if ((RNG.Next(1, branchChance + 1) == 1 || branchPositions.Contains(i)) && roomNumber != 0 && rooms[roomNumber].type != "hallway") {
 				do {
-					roomNumber = RNG.Next(0, i);
+					roomNumber = RNG.Next(0, i - 1);
 				} while (rooms[roomNumber].type == "hallway");
 			}
 		}
@@ -191,4 +212,22 @@ public class MyGame : Game {
 
 		return false;
 	}
+
+	// Destroys everything
+	void DestroyAll() {
+		List<GameObject> children = GetChildren();
+		foreach (GameObject child in children) {
+			child.LateDestroy();
+		}
+        //Doesn't work for some reason? 
+        //Array.Clear(rooms, 0, rooms.Count);
+    }
+
+    void GenerationTesting() {
+		Console.WriteLine("Reset");
+		DestroyAll();
+		RoomGenerator();
+        camera = new Camera(0, 0, 800, 600);
+        AddChild(camera);
+    }
 }
